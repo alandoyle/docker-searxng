@@ -1,6 +1,6 @@
 # docker-searxng
 
-![SearXNG](https://raw.githubusercontent.com/searxng/searxng/master/src/brand/searxng.svg)
+![SearXNG](https://raw.githubusercontent.com/searxng/searxng/master/client/simple/src/brand/searxng.svg)
 
 Updated SearXNG Docker image with allows easier customisation.
 
