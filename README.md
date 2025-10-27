@@ -1,15 +1,26 @@
-# docker-searxng
+# Docker container for SearXNG
+[![Docker Image Size](https://img.shields.io/docker/image-size/alandoyle/searxng/latest?logo=docker&style=for-the-badge)](https://hub.docker.com/r/alandoyle/searxng/tags)
+[![Docker Pulls](https://img.shields.io/docker/pulls/alandoyle/searxng?label=Pulls&logo=docker&style=for-the-badge)](https://hub.docker.com/r/alandoyle/searxng)
+[![Source](https://img.shields.io/badge/Source-GitHub-blue?logo=github&style=for-the-badge)](https://github.com/alandoyle/docker-searxng)
 
-![SearXNG](https://raw.githubusercontent.com/searxng/searxng/master/client/simple/src/brand/searxng.svg)
+This is a Docker container for [SearXNG](https://searxng.org/).
+
+---
+
+[![SearXNG logo](https://images.weserv.nl/?url=raw.githubusercontent.com/alandoyle/docker-searxng/main/SearXNG-logo.svg&w=420)](https://searxng.org/)
 
 Updated SearXNG Docker image with allows easier customisation.
 
-## Docker 
+---
+
+## Docker
 
 Available on [DockerHub](https://hub.docker.com/r/alandoyle/searxng)
 ```bash
 docker pull alandoyle/searxng
 ```
+
+---
 
 ## Usage
 
@@ -42,11 +53,15 @@ services:
      - ./searxng/theme:/usr/local/searxng/searx/static/themes/simple
 ```
 
+---
+
 ### Ports
 
 | Port       | Description           |
 |------------|-----------------------|
 | `8080/tcp` | HTTP                  |
+
+---
 
 ### Volumes
 
