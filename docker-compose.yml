@@ -1,0 +1,14 @@
+---
+services:
+  searxng:
+   image: alandoyle/searxng:latest
+   container_name: searxng
+   restart: unless-stopped
+   init: true
+   ports:
+     - 80:8080/tcp
+   volumes:
+     - ./searxng/config:/etc/searxng
+     - ./searxng/data/:/var/cache/searxng
+     - ./searxng/template:/usr/local/searxng/searx/templates/simple
+     - ./searxng/theme:/usr/local/searxng/searx/static/themes/simple

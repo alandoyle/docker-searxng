@@ -1,188 +1,152 @@
 #!/bin/sh
+# shellcheck shell=dash
+set -u
 
-help() {
-    cat <<EOF
-Command line:
-  -h  Display this help
-  -d  Dry run to update the configuration files.
-  -f  Always update on the configuration files (existing files are renamed with
-      the .old suffix).  Without this option, the new configuration files are
-      copied with the .new suffix
-Environment variables:
-  INSTANCE_NAME settings.yml : general.instance_name
-  AUTOCOMPLETE  settings.yml : search.autocomplete
-  BASE_URL      settings.yml : server.base_url
-  MORTY_URL     settings.yml : result_proxy.url
-  MORTY_KEY     settings.yml : result_proxy.key
-Volume:
-  /etc/searxng  the docker entry point copies settings.yml and uwsgi.ini in
-                this directory (see the -f command line option)"
+# Check if it's a valid file
+check_file() {
+    local target="$1"
 
+    if [ ! -f "$target" ]; then
+        cat <<EOF
+!!!
+!!! ERROR
+!!! "$target" is not a valid file, exiting...
+!!!
 EOF
+        exit 127
+    fi
 }
 
-# Parse command line
-FORCE_CONF_UPDATE=0
-DRY_RUN=0
+# Check if it's a valid directory
+check_directory() {
+    local target="$1"
 
-while getopts "fdh" option
-do
-    case $option in
+    if [ ! -d "$target" ]; then
+        cat <<EOF
+!!!
+!!! ERROR
+!!! "$target" is not a valid directory, exiting...
+!!!
+EOF
+        exit 127
+    fi
+}
 
-        f) FORCE_CONF_UPDATE=1 ;;
-        d) DRY_RUN=1 ;;
+setup_ownership() {
+    local target="$1"
+    local type="$2"
 
-        h)
-            help
-            exit 0
-            ;;
+    case "$type" in
+        file | directory) ;;
         *)
-            echo "unknow option ${option}"
-            exit 42
+            cat <<EOF
+!!!
+!!! ERROR
+!!! "$type" is not a valid type, exiting...
+!!!
+EOF
+            exit 1
             ;;
     esac
-done
 
-echo "SearXNG version $SEARXNG_VERSION"
+    target_ownership=$(stat -c %U:%G "$target")
 
-# helpers to update the configuration files
-patch_uwsgi_settings() {
-    CONF="$1"
-
-    # update uwsg.ini
-    sed -i \
-        -e "s|workers = .*|workers = ${UWSGI_WORKERS:-%k}|g" \
-        -e "s|threads = .*|threads = ${UWSGI_THREADS:-4}|g" \
-        "${CONF}"
-}
-
-patch_searxng_settings() {
-    CONF="$1"
-
-    # Make sure that there is trailing slash at the end of BASE_URL
-    # see https://www.gnu.org/savannah-checkouts/gnu/bash/manual/bash.html#Shell-Parameter-Expansion
-    export BASE_URL="${BASE_URL%/}/"
-
-    # update settings.yml
-    sed -i \
-        -e "s|base_url: false|base_url: ${BASE_URL}|g" \
-        -e "s/instance_name: \"SearXNG\"/instance_name: \"${INSTANCE_NAME}\"/g" \
-        -e "s/autocomplete: \"\"/autocomplete: \"${AUTOCOMPLETE}\"/g" \
-        -e "s/ultrasecretkey/$(head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9')/g" \
-        "${CONF}"
-
-    # Morty configuration
-
-    if [ -n "${MORTY_KEY}" ] && [ -n "${MORTY_URL}" ]; then
-        sed -i -e "s/image_proxy: false/image_proxy: true/g" \
-            "${CONF}"
-        cat >> "${CONF}" <<-EOF
-
-# Morty configuration
-result_proxy:
-   url: ${MORTY_URL}
-   key: !!binary "${MORTY_KEY}"
+    if [ "$target_ownership" != "searxng:searxng" ]; then
+        if [ "${FORCE_OWNERSHIP:-true}" = true ] && [ "$(id -u)" -eq 0 ]; then
+            chown -R searxng:searxng "$target"
+        else
+            cat <<EOF
+!!!
+!!! WARNING
+!!! "$target" $type is not owned by "searxng:searxng"
+!!! This may cause issues when running SearXNG
+!!!
+!!! Expected "searxng:searxng"
+!!! Got "$target_ownership"
+!!!
 EOF
+        fi
     fi
 }
 
-update_conf() {
-    FORCE_CONF_UPDATE=$1
-    CONF="$2"
-    NEW_CONF="${2}.new"
-    OLD_CONF="${2}.old"
-    REF_CONF="$3"
-    PATCH_REF_CONF="$4"
+# Handle volume mounts
+volume_handler() {
+    local target="$1"
 
-    if [ -f "${CONF}" ]; then
-        if [ "${REF_CONF}" -nt "${CONF}" ]; then
-            # There is a new version
-            if [ "$FORCE_CONF_UPDATE" -ne 0 ]; then
-                # Replace the current configuration
-                printf '⚠️  Automatically update %s to the new version\n' "${CONF}"
-                if [ ! -f "${OLD_CONF}" ]; then
-                    printf 'The previous configuration is saved to %s\n' "${OLD_CONF}"
-                    mv "${CONF}" "${OLD_CONF}"
-                fi
-                cp "${REF_CONF}" "${CONF}"
-                $PATCH_REF_CONF "${CONF}"
-            else
-                # Keep the current configuration
-                printf '⚠️  Check new version %s to make sure SearXNG is working properly\n' "${NEW_CONF}"
-                cp "${REF_CONF}" "${NEW_CONF}"
-                $PATCH_REF_CONF "${NEW_CONF}"
-            fi
-        else
-            printf 'Use existing %s\n' "${CONF}"
+    check_directory "$target"
+    setup_ownership "$target" "directory"
+}
+
+# Handle configuration file updates
+config_handler() {
+    local target="$1"
+    local template="$2"
+    local new_template_target="$target.new"
+
+    # Create/Update the configuration file
+    if [ -f "$target" ]; then
+        setup_ownership "$target" "file"
+
+        if [ "$template" -nt "$target" ]; then
+            cp -pfT "$template" "$new_template_target"
+
+            cat <<EOF
+...
+... INFORMATION
+... Update available for "$target"
+... It is recommended to update the configuration file to ensure proper functionality
+...
+... New version placed at "$new_template_target"
+... Please review and merge changes
+...
+EOF
         fi
     else
-        printf 'Create %s\n' "${CONF}"
-        cp "${REF_CONF}" "${CONF}"
-        $PATCH_REF_CONF "${CONF}"
+        cat <<EOF
+...
+... INFORMATION
+... "$target" does not exist, creating from template...
+...
+EOF
+        cp -pfT "$template" "$target"
+
+        sed -i "s/ultrasecretkey/$(head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9')/g" "$target"
     fi
+
+    check_file "$target"
 }
 
-# searx compatibility: copy /etc/searx/* to /etc/searxng/*
-SEARX_CONF=0
-if [ -f "/etc/searx/settings.yml" ]; then
-    if  [ ! -f "${SEARXNG_SETTINGS_PATH}" ]; then
-        printf '⚠️  /etc/searx/settings.yml is copied to /etc/searxng\n'
-        cp "/etc/searx/settings.yml" "${SEARXNG_SETTINGS_PATH}"
-    fi
-    SEARX_CONF=1
-fi
-if [ -f "/etc/searx/uwsgi.ini" ]; then
-    printf '⚠️  /etc/searx/uwsgi.ini is ignored. Use the volume /etc/searxng\n'
-    SEARX_CONF=1
-fi
-if [ "$SEARX_CONF" -eq "1" ]; then
-    printf '⚠️  The deprecated volume /etc/searx is mounted. Please update your configuration to use /etc/searxng ⚠️\n'
-    cat << EOF > /etc/searx/deprecated_volume_read_me.txt
-This Docker image uses the volume /etc/searxng
-Update your configuration:
-* remove uwsgi.ini (or very carefully update your existing uwsgi.ini using https://github.com/searxng/searxng/blob/master/container/uwsgi.ini )
-* mount /etc/searxng instead of /etc/searx
+cat <<EOF
+SearXNG $SEARXNG_VERSION
 EOF
-fi
-# end of searx compatibility
 
-# make sure there are uwsgi settings
-update_conf "${FORCE_CONF_UPDATE}" "${UWSGI_SETTINGS_PATH}" "/usr/local/searxng/container/uwsgi.ini" "patch_uwsgi_settings"
-
-# make sure there are searxng settings
-update_conf "${FORCE_CONF_UPDATE}" "${SEARXNG_SETTINGS_PATH}" "/usr/local/searxng/searx/settings.yml" "patch_searxng_settings"
-
-# dry run (to update configuration files, then inspect them)
-if [ $DRY_RUN -eq 1 ]; then
-    printf 'Dry run\n'
-    exit
-fi
-
-unset MORTY_KEY
-
-# START : Alan Doyle changes
+# Apply them customisations (Alan Doyle)
 # Create missing directories if not mapped in as Volumes
-[ ! -d /usr/local/searxng/searx/templates/simple ] && mkdir -p /usr/local/searxng/searx/templates/simple
+[ ! -d /usr/local/searxng/searx/templates/simple ]     && mkdir -p /usr/local/searxng/searx/templates/simple
 [ ! -d /usr/local/searxng/searx/static/themes/simple ] && mkdir -p /usr/local/searxng/searx/static/themes/simple
 
-# Update with default theme if empty
+# Update with default 'Simple' theme if empty
 if [ ! -f /usr/local/searxng/searx/templates/simple/index.html ] ; then
     cp -R /usr/local/searxng/searx/templates/default/* /usr/local/searxng/searx/templates/simple/
-    date > /usr/local/searxng/searx/templates/simple/.created
     rm -rf /usr/local/searxng/searx/templates/default/
-    chown -R searxng:searxng /usr/local/searxng/searx/templates/
+    date > /usr/local/searxng/searx/templates/simple/.created
 fi
 
 if [ ! -f /usr/local/searxng/searx/static/themes/simple/css/searxng.min.css ] ; then
     cp -R /usr/local/searxng/searx/static/themes/default/* /usr/local/searxng/searx/static/themes/simple/
-    date > /usr/local/searxng/searx/static/themes/simple/.created
     rm -rf /usr/local/searxng/searx/static/themes/default/
-    chown -R searxng:searxng /usr/local/searxng/searx/static/themes/
+    date > /usr/local/searxng/searx/static/themes/simple/.created
 fi
-# END : Alan Doyle changes
 
-printf 'Listen on %s\n' "${BIND_ADDRESS}"
+# Check for volume mounts
+volume_handler "$CONFIG_PATH"
+volume_handler "$DATA_PATH"
+volume_handler "/usr/local/searxng/searx/templates/simple/"
+volume_handler "/usr/local/searxng/searx/static/themes/simple/"
 
-# Start uwsgi
-# TODO: "--http-socket" will be removed in the future (see uwsgi.ini.new config file): https://github.com/searxng/searxng/pull/4578
-exec /usr/local/searxng/venv/bin/uwsgi --http-socket "${BIND_ADDRESS}" "${UWSGI_SETTINGS_PATH}"
+# Check for files
+config_handler "$SEARXNG_SETTINGS_PATH" "/usr/local/searxng/searx/settings.yml"
+
+update-ca-certificates
+
+exec /usr/local/searxng/.venv/bin/granian searx.webapp:app

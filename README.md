@@ -28,6 +28,7 @@ docker pull alandoyle/searxng
 docker run --name=searxng \
   -d --init \
   -v <MY_CONFIG_PATH>:/etc/searxng \
+  -v <MY_DATA_PATH>:/var/cache/searxng \
   -v <MY_TEMPLATE_PATH>:/usr/local/searxng/searx/templates/simple \
   -v <MY_THEME_PATH>:/usr/local/searxng/searx/static/themes/simple \
   -p 8000:8080/tcp \
@@ -37,8 +38,7 @@ docker run --name=searxng \
 Docker compose example:
 
 ```yaml
-version: "3"
-
+---
 services:
   searxng:
    image: alandoyle/searxng:latest
@@ -49,6 +49,7 @@ services:
      - "8000:8080/tcp"
    volumes:
      - ./searxng/config:/etc/searxng
+     - ./searxng/data/:/var/cache/searxng
      - ./searxng/template:/usr/local/searxng/searx/templates/simple
      - ./searxng/theme:/usr/local/searxng/searx/static/themes/simple
 ```
@@ -65,8 +66,9 @@ services:
 
 ### Volumes
 
-| Path                                               | Description                           |
-|-------------------------------------------------|---------------------------------------|
-| `/etc/searxng`                                  | path for SearXNG configuration files |
-| `/usr/local/searxng/searx/templates/simple`     | path for SearXNG temolate files          |
-| `/usr/local/searxng/searx/static/themes/simple` | path for SearXNG theme files          |
+| Path                                            | Description                            |
+|-------------------------------------------------|----------------------------------------|
+| `/etc/searxng`                                  | path for SearXNG configuration files   |
+| `/var/cache/searxng`                            | path for SearXNG data/cache files      |
+| `/usr/local/searxng/searx/templates/simple`     | path for SearXNG template files        |
+| `/usr/local/searxng/searx/static/themes/simple` | path for SearXNG template static files |
