@@ -117,7 +117,7 @@ EOF
 }
 
 cat <<EOF
-SearXNG $SEARXNG_VERSION
+SearXNG $__SEARXNG_VERSION
 EOF
 
 # Apply them customisations (Alan Doyle)
@@ -126,27 +126,35 @@ EOF
 [ ! -d /usr/local/searxng/searx/static/themes/simple ] && mkdir -p /usr/local/searxng/searx/static/themes/simple
 
 # Update with default 'Simple' theme if empty
-if [ ! -f /usr/local/searxng/searx/templates/simple/index.html ] ; then
+if [ ! -f /usr/local/searxng/searx/templates/simple/.created ] ; then
     cp -R /usr/local/searxng/searx/templates/default/* /usr/local/searxng/searx/templates/simple/
-    rm -rf /usr/local/searxng/searx/templates/default/
-    date > /usr/local/searxng/searx/templates/simple/.created
+    echo "DO NOT DELETE ME [`date`]" > /usr/local/searxng/searx/templates/simple/.created
 fi
 
-if [ ! -f /usr/local/searxng/searx/static/themes/simple/css/searxng.min.css ] ; then
+if [ ! -f /usr/local/searxng/searx/static/themes/simple/.created ] ; then
     cp -R /usr/local/searxng/searx/static/themes/default/* /usr/local/searxng/searx/static/themes/simple/
-    rm -rf /usr/local/searxng/searx/static/themes/default/
-    date > /usr/local/searxng/searx/static/themes/simple/.created
+    echo "DO NOT DELETE ME [`date`]" > /usr/local/searxng/searx/static/themes/simple/.created
 fi
+
+[ -d /usr/local/searxng/searx/static/themes/default/ ] && rm -rf /usr/local/searxng/searx/static/themes/default/
+[ -d /usr/local/searxng/searx/templates/default/ ]     && rm -rf /usr/local/searxng/searx/templates/default/
 
 # Check for volume mounts
-volume_handler "$CONFIG_PATH"
-volume_handler "$DATA_PATH"
+volume_handler "$__SEARXNG_CONFIG_PATH"
+volume_handler "$__SEARXNG_DATA_PATH"
 volume_handler "/usr/local/searxng/searx/templates/simple/"
 volume_handler "/usr/local/searxng/searx/static/themes/simple/"
+volume_handler "/var/cache/searxng/"
 
 # Check for files
-config_handler "$SEARXNG_SETTINGS_PATH" "/usr/local/searxng/searx/settings.yml"
+config_handler "$__SEARXNG_SETTINGS_PATH" "/usr/local/searxng/searx/settings.yml"
 
-update-ca-certificates
+# root only features
+if [ "$(id -u)" -eq 0 ]; then
+    update-ca-certificates
+fi
+
+# ENVs aliases
+export GRANIAN_PORT="${SEARXNG_PORT:-$GRANIAN_PORT}"
 
 exec /usr/local/searxng/.venv/bin/granian searx.webapp:app
