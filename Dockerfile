@@ -1,5 +1,5 @@
 #Dockerfile.
-FROM searxng/searxng:2026.5.5-d3566fe8a
+FROM searxng/searxng:2026.9.1-18af21159
 
 # Create Default theme
 RUN mv /usr/local/searxng/searx/templates/simple/ /usr/local/searxng/searx/templates/default/
